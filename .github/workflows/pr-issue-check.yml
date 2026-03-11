@@ -23,6 +23,24 @@ jobs:
 
             core.info(`Checking PR #${prNumber} by @${prAuthor}`);
 
+            // Check if the PR author is a repository collaborator
+            try {
+              await github.rest.repos.checkCollaborator({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: prAuthor,
+              });
+              // 204 = is a collaborator, skip all checks
+              core.info(`✅ @${prAuthor} is a repository collaborator — skipping issue linkage check.`);
+              return;
+            } catch (error) {
+              if (error.status === 404) {
+                core.info(`@${prAuthor} is not a collaborator — enforcing issue linkage check.`);
+              } else {
+                throw error;
+              }
+            }
+
             // Query linked (closing) issues via GraphQL
             const query = `
               query($owner: String!, $repo: String!, $prNumber: Int!) {
