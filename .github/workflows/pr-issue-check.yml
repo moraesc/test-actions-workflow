@@ -11,18 +11,16 @@ permissions:
 
 jobs:
   check-issue-linkage:
-    name: Verify linked issues and assignment
+    name: Verify linked issues
     runs-on: ubuntu-latest
     steps:
-      - name: Check PR has linked issues assigned to author
+      - name: Check PR has linked issues
         uses: actions/github-script@v7
         with:
           script: |
             const prNumber = context.payload.pull_request.number;
             const prAuthor = context.payload.pull_request.user.login;
-
             core.info(`Checking PR #${prNumber} by @${prAuthor}`);
-
             // Check if the PR author is a repository collaborator
             try {
               await github.rest.repos.checkCollaborator({
@@ -40,7 +38,6 @@ jobs:
                 throw error;
               }
             }
-
             // Query linked (closing) issues via GraphQL
             const query = `
               query($owner: String!, $repo: String!, $prNumber: Int!) {
@@ -50,27 +47,18 @@ jobs:
                       nodes {
                         number
                         title
-                        assignees(first: 20) {
-                          nodes {
-                            login
-                          }
-                        }
                       }
                     }
                   }
                 }
               }
             `;
-
             const result = await github.graphql(query, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               prNumber: prNumber,
             });
-
             const linkedIssues = result.repository.pullRequest.closingIssuesReferences.nodes;
-
-            // Check 1: PR must have at least one linked issue
             if (linkedIssues.length === 0) {
               core.setFailed(
                 `❌ This PR has no linked issues. ` +
@@ -79,25 +67,4 @@ jobs:
               );
               return;
             }
-
-            core.info(`Found ${linkedIssues.length} linked issue(s)`);
-
-            // Check 2: All linked issues must be assigned to the PR author
-            const unassignedIssues = linkedIssues.filter(issue => {
-              const assigneeLogins = issue.assignees.nodes.map(a => a.login);
-              return !assigneeLogins.includes(prAuthor);
-            });
-
-            if (unassignedIssues.length > 0) {
-              const issueList = unassignedIssues
-                .map(i => `  • #${i.number} — ${i.title}`)
-                .join('\n');
-
-              core.setFailed(
-                `❌ The following linked issue(s) are not assigned to the PR author (@${prAuthor}):\n${issueList}\n\n` +
-                `Please assign yourself to all linked issues before merging.`
-              );
-              return;
-            }
-
-            core.info(`✅ All ${linkedIssues.length} linked issue(s) are assigned to @${prAuthor}`);
+            core.info(`✅ Found ${linkedIssues.length} linked issue(s)`);
